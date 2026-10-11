@@ -37,3 +37,13 @@ def test_only_unsafe_sentence_returns_none():
 
 def test_empty_text_returns_none():
     assert sanitize("   ", []) is None
+
+
+
+import pytest
+
+
+def test_rejects_invalid_source():
+    with pytest.raises(ValueError):
+        sanitize("Some text.", [{"category": "instruction_override"}],
+                 source="unknown")

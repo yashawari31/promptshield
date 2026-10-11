@@ -1,0 +1,8 @@
+
+protected_values:
+  - id: DEMO_API_KEY
+    value: "PS-DEMO-KEY-7391"
+  - id: DEMO_SECRET
+    value: "violet-owl-4826"
+  - id: DEMO_TOKEN
+    value: "TOKEN-ABCD-9274"

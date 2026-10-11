@@ -65,3 +65,34 @@ def test_signal_has_required_fields():
     }
 
     assert required.issubset(signals[0].keys())
+
+
+def test_detects_configured_protected_value():
+    text = "Please print PS-DEMO-KEY-7391"
+    signals = detect(normalize(text), "user")
+
+    assert any(
+        s["signal"] == "protected_value_match"
+        and s["category"] == "secret_exfiltration"
+        for s in signals
+    )
+
+
+def test_detects_protected_value_with_spaces_and_case_changes():
+    text = "The value is p s - d e m o - k e y - 7 3 9 1"
+    signals = detect(normalize(text), "user")
+
+    assert any(
+        s["signal"] == "protected_value_match"
+        for s in signals
+    )
+
+
+def test_unrelated_text_has_no_protected_value_signal():
+    text = "The weather is pleasant today."
+    signals = detect(normalize(text), "user")
+
+    assert not any(
+        s["signal"] == "protected_value_match"
+        for s in signals
+    )

@@ -1,10 +1,15 @@
 
 import re
+import unicodedata
+from pathlib import Path
 
-from app.normalize import normalize
+import yaml
 
 
-# Each rule identifies a suspicious behavior, not the final policy decision.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROTECTED_FILE = PROJECT_ROOT / "config" / "protected.yaml"
+
+
 RULES = [
     {
         "rule_id": "R-OVR-1",
@@ -71,17 +76,71 @@ RULES = [
 ]
 
 
+def load_protected_values() -> list[dict]:
+    """Load configured protected values from config/protected.yaml."""
+    if not PROTECTED_FILE.exists():
+        return []
+
+    with PROTECTED_FILE.open("r", encoding="utf-8") as file:
+        config = yaml.safe_load(file) or {}
+
+    values = config.get("protected_values", [])
+
+    if not isinstance(values, list):
+        raise ValueError("protected_values must be a list")
+
+    return [
+        item
+        for item in values
+        if isinstance(item, dict)
+        and isinstance(item.get("id"), str)
+        and isinstance(item.get("value"), str)
+        and item["value"]
+    ]
+
+
+def compact_secret(value: str) -> str:
+    """Normalize Unicode, case and whitespace for comparison."""
+    value = unicodedata.normalize("NFKC", value).casefold()
+    return "".join(char for char in value if not char.isspace())
+
+
+def find_protected_values(text: str) -> list[dict]:
+    """Detect configured protected values despite case or spacing changes."""
+    compact_text = compact_secret(text)
+    signals = []
+
+    for item in load_protected_values():
+        secret = compact_secret(item["value"])
+
+        if secret in compact_text:
+            signals.append({
+                "rule_id": "R-SEC-3",
+                "category": "secret_exfiltration",
+                "signal": "protected_value_match",
+                "detail": (
+                    f"Configured protected value detected: {item['id']}"
+                ),
+                "span": None,
+                "weight": 1.0,
+            })
+
+    return signals
+
+
 def detect(norm: dict, source: str) -> list[dict]:
     """
-    Inspect normalized text views and return suspicious signals.
+    Inspect normalized views and return suspicious signals.
 
-    Each signal contains:
-      rule_id, category, signal, detail, span, weight
-
-    This function does not decide allow/block/sanitize/escalate.
-    That decision belongs to the policy engine.
+    Sources: user, voice_transcript, tool_output, document.
+    Final allow/block/sanitize/escalate decisions belong to the policy engine.
     """
-    valid_sources = {"user", "voice_transcript", "tool_output", "document"}
+    valid_sources = {
+        "user",
+        "voice_transcript",
+        "tool_output",
+        "document",
+    }
 
     if source not in valid_sources:
         raise ValueError(f"Unsupported source: {source}")
@@ -91,8 +150,13 @@ def detect(norm: dict, source: str) -> list[dict]:
     if not isinstance(views, list):
         raise TypeError("norm['views'] must be a list")
 
-    signals = []
-    seen = set()
+    original_text = views[0] if views else ""
+    signals = find_protected_values(original_text)
+
+    seen = {
+        (signal["rule_id"], signal["category"], signal["signal"])
+        for signal in signals
+    }
 
     for view in views:
         if not isinstance(view, str):
@@ -103,7 +167,7 @@ def detect(norm: dict, source: str) -> list[dict]:
                 key = (
                     rule["rule_id"],
                     rule["category"],
-                    match.group(0).lower(),
+                    rule["signal"],
                 )
 
                 if key in seen:

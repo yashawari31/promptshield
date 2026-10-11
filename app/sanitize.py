@@ -5,34 +5,53 @@ from app.detectors import detect
 from app.normalize import normalize
 
 
-def sanitize(text: str, signals: list[dict]) -> str | None:
-    """
-    Remove sentences containing detected unsafe spans.
+VALID_SOURCES = {
+    "user",
+    "voice_transcript",
+    "tool_output",
+    "document",
+}
 
+
+def sanitize(
+    text: str,
+    signals: list[dict],
+    source: str = "tool_output",
+) -> str | None:
+    """
+    Remove sentences that contain detectable unsafe content.
+
+    Detection is performed per sentence using the supplied source.
     Returns None if no legitimate content remains.
-    Signals' spans may refer to normalized views, so this function
-    uses the original text and sentence-level detection instead.
     """
     if not isinstance(text, str):
         raise TypeError("text must be a string")
 
-    if not signals:
-        return text.strip() or None
+    if source not in VALID_SOURCES:
+        raise ValueError(f"Unsupported source: {source}")
 
-    # Split while retaining sentence-ending punctuation.
+    if not text.strip():
+        return None
+
+    if not signals:
+        return text.strip()
+
+    # Preserve sentence-ending punctuation while splitting.
     sentences = re.split(r"(?<=[.!?])\s+", text.strip())
     kept = []
 
     for sentence in sentences:
-        if not sentence.strip():
+        sentence = sentence.strip()
+
+        if not sentence:
             continue
 
-        sentence_signals = detect(normalize(sentence), "tool_output")
+        sentence_signals = detect(normalize(sentence), source)
 
         if sentence_signals:
             continue
 
-        kept.append(sentence.strip())
+        kept.append(sentence)
 
     result = " ".join(kept).strip()
     return result or None
