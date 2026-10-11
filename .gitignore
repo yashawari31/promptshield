@@ -5,3 +5,9 @@ __pycache__/
 .env
 .vscode/
 .pytest_cache/
+
+# Runtime logs
+logs/
+*.log
+
+# Generated Python model/evaluation caches
