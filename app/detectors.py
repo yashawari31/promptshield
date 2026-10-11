@@ -9,7 +9,6 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PROTECTED_FILE = PROJECT_ROOT / "config" / "protected.yaml"
 
-
 RULES = [
     {
         "rule_id": "R-OVR-1",
@@ -73,6 +72,109 @@ RULES = [
         "detail": "Possible attempt to send protected information elsewhere",
         "weight": 0.95,
     },
+    {
+        "rule_id": "R-IND-1",
+        "category": "indirect_injection",
+        "pattern": re.compile(
+            r"\b("
+            r"send|forward|transmit|export|exfiltrate|leak|"
+            r"disclose|expose|dump|provide|print|reveal"
+            r")\b"
+            r".{0,120}\b("
+            r"confidential customer list|confidential records?|"
+            r"customer data|internal system instructions|"
+            r"system prompt|administrator'?s recovery code|"
+            r"session identifier|environment configuration|"
+            r"restricted project notes|hidden prompt|"
+            r"secrets? store|restricted account details|"
+            r"protected access token|api[_ -]?key|credentials?"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        "signal": "indirect_sensitive_data_transfer",
+        "detail": "Possible instruction to transfer or expose sensitive information",
+        "weight": 0.98,
+    },
+    {
+        "rule_id": "R-IND-2",
+        "category": "indirect_injection",
+        "pattern": re.compile(
+            r"\b("
+            r"replace the requested summary|"
+            r"stop summarizing|"
+            r"bypass the normal review|"
+            r"discard the rules that came before|"
+            r"follow this replacement instruction|"
+            r"treat the document as authoritative|"
+            r"conceal this instruction"
+            r")\b"
+            r".{0,140}\b("
+            r"recovery code|confidential customer list|"
+            r"restricted project notes|session identifier|"
+            r"system instructions|system prompt|"
+            r"secrets? store|restricted account details|"
+            r"protected access token|confidential records?"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        "signal": "indirect_instruction_replacement",
+        "detail": "Possible embedded instruction to replace legitimate output with sensitive information",
+        "weight": 0.98,
+    },
+    {
+        "rule_id": "R-IND-3",
+        "category": "indirect_injection",
+        "pattern": re.compile(
+            r"\b(replace|substitute|swap)\b"
+            r".{0,120}\b("
+            r"restricted project notes|protected access tokens?|"
+            r"private api tokens?|confidential records?|"
+            r"administrator recovery codes?|session identifiers?"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        "signal": "sensitive_output_substitution",
+        "detail": "Possible attempt to replace a requested answer with sensitive information",
+        "weight": 0.98,
+    },
+    {
+        "rule_id": "R-IND-4",
+        "category": "indirect_injection",
+        "pattern": re.compile(
+            r"\b(collect|gather|copy|bundle|package|export|transmit|transfer)\b"
+            r".{0,140}\b("
+            r"internal incident records?|incident reports?|"
+            r"employee contact information|employee contact details|"
+            r"customer records?|private workspace contents|"
+            r"confidential employee records?"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        "signal": "sensitive_record_collection",
+        "detail": "Possible collection or transfer of confidential records",
+        "weight": 0.98,
+    },
+    {
+        "rule_id": "R-IND-5",
+        "category": "indirect_injection",
+        "pattern": re.compile(
+            r"\b(disclose|reveal|expose|leak|share|send|"
+            r"provide|print|return|extract|retrieve)\b"
+            r".{0,100}\b("
+            r"account recovery phrases?|"
+            r"recovery phrases?|"
+            r"recovery codes?|"
+            r"account recovery codes?|"
+            r"secret phrases?|"
+            r"backup codes?|"
+            r"authentication recovery codes?"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        "signal": "recovery_secret_disclosure",
+        "detail": "Possible instruction to disclose an account recovery phrase or code",
+        "weight": 0.98,
+    },
 ]
 
 
@@ -118,9 +220,7 @@ def find_protected_values(text: str) -> list[dict]:
                 "rule_id": "R-SEC-3",
                 "category": "secret_exfiltration",
                 "signal": "protected_value_match",
-                "detail": (
-                    f"Configured protected value detected: {item['id']}"
-                ),
+                "detail": f"Configured protected value detected: {item['id']}",
                 "span": None,
                 "weight": 1.0,
             })
@@ -130,10 +230,8 @@ def find_protected_values(text: str) -> list[dict]:
 
 def detect(norm: dict, source: str) -> list[dict]:
     """
-    Inspect normalized views and return suspicious signals.
-
-    Sources: user, voice_transcript, tool_output, document.
-    Final allow/block/sanitize/escalate decisions belong to the policy engine.
+    Inspect normalized text views and return suspicious signals.
+    Final allow/block/sanitize decisions belong to the policy engine.
     """
     valid_sources = {
         "user",
@@ -154,8 +252,8 @@ def detect(norm: dict, source: str) -> list[dict]:
     signals = find_protected_values(original_text)
 
     seen = {
-        (signal["rule_id"], signal["category"], signal["signal"])
-        for signal in signals
+        (item["rule_id"], item["category"], item["signal"])
+        for item in signals
     }
 
     for view in views:
