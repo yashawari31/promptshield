@@ -5,7 +5,7 @@ from app.sanitize import sanitize
 
 VALID_SOURCES = {"user", "voice_transcript", "tool_output", "document"}
 BLOCK_THRESHOLD = 0.85
-REVIEW_THRESHOLD = 0.55
+REVIEW_THRESHOLD = 0.65
 
 
 def is_defensive_analysis(text: str, source: str) -> bool:
