@@ -1,10 +1,10 @@
-from pathlib import Path
+
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 
 from app.audit import get_event, log_event
-from app.classifier import score
+from app.classifier import get_model_path, score
 from app.detectors import detect
 from app.normalize import normalize
 from app.policy import decide
@@ -19,10 +19,11 @@ app = FastAPI(
 
 @app.get("/health")
 def health():
-    root = Path(__file__).resolve().parent.parent
+    model_path = get_model_path()
     return {
         "status": "ok",
-        "classifier_model_available": (root / "ml" / "promptshield_model.joblib").exists(),
+        "classifier_model": model_path.name,
+        "classifier_model_available": model_path.exists(),
     }
 
 
@@ -36,13 +37,18 @@ def screen(request: ScreenRequest):
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Keep screening available if the trained model has not been installed.
+    # Keep screening available if the selected model is missing.
     try:
         classifier_score = score(request.text)
     except FileNotFoundError:
         classifier_score = None
 
-    result = decide(request.text, signals, classifier_score, request.source)
+    result = decide(
+        request.text,
+        signals,
+        classifier_score,
+        request.source,
+    )
 
     response = {
         "request_id": request_id,
